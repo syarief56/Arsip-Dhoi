@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Arsip Saya</title>
+<meta name="theme-color" content="#1E3A36" />
+<link rel="manifest" href="./manifest.json" />
+<link rel="apple-touch-icon" href="./icons/icon-192.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Serif+4:wght@600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+
+<div id="app">
+
+  <div class="topbar">
+    <div class="brand">
+      <div class="brand-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#C48A3D" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg>
+      </div>
+      <span class="brand-mark">Arsip Saya</span>
+    </div>
+    <button id="account-btn" class="account-btn" title="Keluar" aria-label="Keluar">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg>
+    </button>
+  </div>
+
+  <!-- ====== Panel sign in ====== -->
+  <div id="signin-panel" class="signin-panel">
+    <h2>Selamat datang</h2>
+    <p>Masuk dengan akun Google supaya dokumen dan foto kamu tersimpan aman di Google Drive milikmu sendiri.</p>
+    <button id="signin-btn" class="btn-primary">
+      <svg width="16" height="16" viewBox="0 0 24 24"><path fill="#fff" d="M21.8 10.4h-9.4v3.8h5.4c-.2 1.4-1.6 4.1-5.4 4.1-3.3 0-5.9-2.7-5.9-6s2.6-6 5.9-6c1.9 0 3.1.8 3.8 1.5l2.6-2.5C17.1 3.7 15 2.8 12.4 2.8 7.2 2.8 3 7 3 12.2s4.2 9.4 9.4 9.4c5.4 0 9-3.8 9-9.1 0-.6-.1-1.1-.2-1.7z"/></svg>
+      Masuk dengan Google
+    </button>
+
+    <div class="setup-note">
+      Baru pertama kali pakai? Kamu perlu isi <strong>Google Client ID</strong> milikmu sendiri dulu (lihat <code>README.md</code> untuk cara membuatnya, gratis, sekitar 5 menit).
+      <div style="margin-top:10px; display:flex; gap:8px;">
+        <input id="client-id-input" type="text" placeholder="xxxxxxxx.apps.googleusercontent.com"
+          style="flex:1; min-width:0; font-size:12.5px; padding:8px 10px; border:1px solid var(--line); border-radius:6px; background:#fff; color:var(--ink);" />
+      </div>
+    </div>
+  </div>
+
+  <!-- ====== Tampilan utama ====== -->
+  <div id="main-view" class="hidden">
+
+    <div class="search-row">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+      <input id="search-input" type="text" placeholder="Cari dokumen atau foto" />
+    </div>
+
+    <div id="categories" class="categories">
+      <button class="cat-tab active" data-category="semua">Semua</button>
+      <button class="cat-tab" data-category="dokumen">Dokumen</button>
+      <button class="cat-tab" data-category="foto">Foto</button>
+      <button class="cat-tab" data-category="lainnya">Lainnya</button>
+    </div>
+
+    <div class="summary">
+      <span class="label">Disimpan di folder "Arsip Saya" di Drive kamu</span>
+      <span id="storage-value" class="value">0 berkas</span>
+    </div>
+
+    <div class="section-label">Berkas</div>
+    <div id="file-list" class="file-list"></div>
+    <div id="empty-state" class="empty-state hidden"></div>
+  </div>
+
+  <input id="file-input" type="file" multiple class="hidden" />
+
+  <div class="bottom-nav">
+    <button class="nav-btn active">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>
+      Beranda
+    </button>
+    <button id="upload-btn" class="nav-btn upload-btn" aria-label="Unggah berkas">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>
+    </button>
+    <button class="nav-btn">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+      Pengaturan
+    </button>
+  </div>
+
+  <div id="toast" class="toast">
+    <span id="toast-text"></span>
+  </div>
+
+</div>
+
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="./app.js"></script>
+</body>
+</html>
