@@ -63,8 +63,10 @@
       <button class="cat-tab" data-category="lainnya">Lainnya</button>
     </div>
 
+    <div id="breadcrumb" class="breadcrumb"></div>
+
     <div class="summary">
-      <span class="label">Disimpan di folder "Arsip Saya" di Drive kamu</span>
+      <span class="label">Tersimpan di Google Drive kamu</span>
       <span id="storage-value" class="value">0 berkas</span>
     </div>
 
@@ -91,6 +93,31 @@
 
   <div id="toast" class="toast">
     <span id="toast-text"></span>
+  </div>
+
+  <!-- ====== Backdrop untuk action sheet & modal ====== -->
+  <div id="action-sheet-backdrop" class="sheet-backdrop"></div>
+
+  <!-- ====== Action sheet: Unggah berkas / Buat folder ====== -->
+  <div id="action-sheet" class="action-sheet">
+    <button id="action-upload" class="sheet-option">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>
+      Unggah berkas
+    </button>
+    <button id="action-new-folder" class="sheet-option">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/><path d="M12 11v4M10 13h4"/></svg>
+      Buat folder baru
+    </button>
+  </div>
+
+  <!-- ====== Modal: nama folder baru ====== -->
+  <div id="new-folder-modal" class="new-folder-modal">
+    <h3>Folder baru</h3>
+    <input id="new-folder-input" type="text" placeholder="Nama folder, misal: Ijazah" />
+    <div class="modal-actions">
+      <button id="new-folder-cancel" class="btn-text">Batal</button>
+      <button id="new-folder-confirm" class="btn-primary small">Buat</button>
+    </div>
   </div>
 
 </div>
