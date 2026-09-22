@@ -3,12 +3,13 @@
    Disimpan di localStorage supaya kamu tidak perlu edit kode untuk pasang punya sendiri. */
 const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive";
 const APP_FOLDER_NAME = "Arsip Saya";
+const FOLDER_MIME = "application/vnd.google-apps.folder";
 
 let tokenClient = null;
 let accessToken = null;
-let appFolderId = null;
-let allFiles = [];
+let allItems = []; // files + folders di folder yang sedang dibuka
 let activeCategory = "semua";
+let folderStack = []; // [{id, name}, ...] root ada di index 0
 
 const els = {};
 
@@ -38,6 +39,7 @@ function cacheEls() {
   els.accountBtn = document.getElementById("account-btn");
   els.searchInput = document.getElementById("search-input");
   els.categories = document.getElementById("categories");
+  els.breadcrumb = document.getElementById("breadcrumb");
   els.fileList = document.getElementById("file-list");
   els.emptyState = document.getElementById("empty-state");
   els.storageValue = document.getElementById("storage-value");
@@ -45,26 +47,94 @@ function cacheEls() {
   els.fileInput = document.getElementById("file-input");
   els.toast = document.getElementById("toast");
   els.toastText = document.getElementById("toast-text");
+  els.actionSheet = document.getElementById("action-sheet");
+  els.actionSheetBackdrop = document.getElementById("action-sheet-backdrop");
+  els.actionUpload = document.getElementById("action-upload");
+  els.actionNewFolder = document.getElementById("action-new-folder");
+  els.newFolderModal = document.getElementById("new-folder-modal");
+  els.newFolderInput = document.getElementById("new-folder-input");
+  els.newFolderCancel = document.getElementById("new-folder-cancel");
+  els.newFolderConfirm = document.getElementById("new-folder-confirm");
 }
 
 function bindEvents() {
   els.signinBtn.addEventListener("click", handleSignInClick);
   els.accountBtn.addEventListener("click", handleSignOut);
-  els.searchInput.addEventListener("input", debounce(renderFiles, 200));
+  els.searchInput.addEventListener("input", debounce(renderItems, 200));
   els.categories.addEventListener("click", (e) => {
     const tab = e.target.closest(".cat-tab");
     if (!tab) return;
     activeCategory = tab.dataset.category;
     [...els.categories.children].forEach((c) => c.classList.toggle("active", c === tab));
-    renderFiles();
+    renderItems();
   });
-  els.uploadBtn.addEventListener("click", () => els.fileInput.click());
+
+  els.uploadBtn.addEventListener("click", () => openActionSheet());
+  els.actionSheetBackdrop.addEventListener("click", closeActionSheet);
+  els.actionUpload.addEventListener("click", () => {
+    closeActionSheet();
+    els.fileInput.click();
+  });
+  els.actionNewFolder.addEventListener("click", () => {
+    closeActionSheet();
+    openNewFolderModal();
+  });
+  els.newFolderCancel.addEventListener("click", closeNewFolderModal);
+  els.newFolderConfirm.addEventListener("click", handleCreateFolder);
+  els.newFolderInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") handleCreateFolder();
+  });
+
   els.fileInput.addEventListener("change", handleFileUpload);
 }
 
 function registerServiceWorker() {
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("./sw.js").catch(() => {});
+  }
+}
+
+/* ====== Action sheet (Unggah / Buat folder) ====== */
+function openActionSheet() {
+  els.actionSheet.classList.add("show");
+  els.actionSheetBackdrop.classList.add("show");
+}
+function closeActionSheet() {
+  els.actionSheet.classList.remove("show");
+  els.actionSheetBackdrop.classList.remove("show");
+}
+
+function openNewFolderModal() {
+  els.newFolderInput.value = "";
+  els.newFolderModal.classList.add("show");
+  els.actionSheetBackdrop.classList.add("show");
+  setTimeout(() => els.newFolderInput.focus(), 50);
+}
+function closeNewFolderModal() {
+  els.newFolderModal.classList.remove("show");
+  els.actionSheetBackdrop.classList.remove("show");
+}
+
+async function handleCreateFolder() {
+  const name = els.newFolderInput.value.trim();
+  if (!name) return;
+  closeNewFolderModal();
+  showToast(`Membuat folder "${name}"...`);
+  try {
+    await driveFetch("files", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name,
+        mimeType: FOLDER_MIME,
+        parents: [currentFolderId()],
+      }),
+    });
+    showToast("Folder dibuat.");
+    await loadItems();
+  } catch (err) {
+    console.error(err);
+    showToast("Gagal membuat folder.");
   }
 }
 
@@ -102,7 +172,7 @@ function handleSignOut() {
   }
   sessionStorage.removeItem("arsip_access_token");
   accessToken = null;
-  appFolderId = null;
+  folderStack = [];
   els.mainView.classList.add("hidden");
   els.signinPanel.classList.remove("hidden");
 }
@@ -111,8 +181,9 @@ async function afterSignIn() {
   els.signinPanel.classList.add("hidden");
   els.mainView.classList.remove("hidden");
   try {
-    appFolderId = await findOrCreateAppFolder();
-    await loadFiles();
+    const rootId = await findOrCreateAppFolder();
+    folderStack = [{ id: rootId, name: APP_FOLDER_NAME }];
+    await loadItems();
   } catch (err) {
     console.error(err);
     showToast("Gagal memuat data dari Drive.");
@@ -134,7 +205,7 @@ async function driveFetch(path, options = {}) {
 
 async function findOrCreateAppFolder() {
   const q = encodeURIComponent(
-    `name='${APP_FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false`
+    `name='${APP_FOLDER_NAME}' and mimeType='${FOLDER_MIME}' and trashed=false and 'root' in parents`
   );
   const found = await driveFetch(`files?q=${q}&fields=files(id,name)`);
   if (found.files && found.files.length > 0) return found.files[0].id;
@@ -142,26 +213,57 @@ async function findOrCreateAppFolder() {
   const created = await driveFetch("files", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      name: APP_FOLDER_NAME,
-      mimeType: "application/vnd.google-apps.folder",
-    }),
+    body: JSON.stringify({ name: APP_FOLDER_NAME, mimeType: FOLDER_MIME }),
   });
   return created.id;
 }
 
-async function loadFiles() {
-  const q = encodeURIComponent(`'${appFolderId}' in parents and trashed=false`);
+function currentFolderId() {
+  return folderStack[folderStack.length - 1].id;
+}
+
+async function loadItems() {
+  const q = encodeURIComponent(`'${currentFolderId()}' in parents and trashed=false`);
   const data = await driveFetch(
-    `files?q=${q}&orderBy=modifiedTime desc&pageSize=200&fields=files(id,name,mimeType,size,modifiedTime,webViewLink)`
+    `files?q=${q}&orderBy=folder,modifiedTime desc&pageSize=200&fields=files(id,name,mimeType,size,modifiedTime,webViewLink)`
   );
-  allFiles = data.files || [];
-  renderFiles();
+  allItems = data.files || [];
+  renderBreadcrumb();
+  renderItems();
   updateStorageLabel();
 }
 
 function updateStorageLabel() {
-  els.storageValue.textContent = `${allFiles.length} berkas`;
+  const fileCount = allItems.filter((f) => f.mimeType !== FOLDER_MIME).length;
+  els.storageValue.textContent = `${fileCount} berkas`;
+}
+
+/* ====== Breadcrumb / navigasi folder ====== */
+function renderBreadcrumb() {
+  els.breadcrumb.innerHTML = "";
+  folderStack.forEach((f, idx) => {
+    const isLast = idx === folderStack.length - 1;
+    const crumb = document.createElement("button");
+    crumb.className = "crumb" + (isLast ? " current" : "");
+    crumb.textContent = f.name;
+    crumb.disabled = isLast;
+    crumb.addEventListener("click", () => {
+      folderStack = folderStack.slice(0, idx + 1);
+      loadItems();
+    });
+    els.breadcrumb.appendChild(crumb);
+    if (!isLast) {
+      const sep = document.createElement("span");
+      sep.className = "crumb-sep";
+      sep.textContent = "/";
+      els.breadcrumb.appendChild(sep);
+    }
+  });
+}
+
+function enterFolder(folder) {
+  folderStack.push({ id: folder.id, name: folder.name });
+  loadItems();
 }
 
 /* ====== Upload ====== */
@@ -182,11 +284,11 @@ async function handleFileUpload(e) {
 
   showToast("Selesai mengunggah.");
   els.fileInput.value = "";
-  await loadFiles();
+  await loadItems();
 }
 
 async function uploadFile(file) {
-  const metadata = { name: file.name, parents: [appFolderId] };
+  const metadata = { name: file.name, parents: [currentFolderId()] };
   const form = new FormData();
   form.append("metadata", new Blob([JSON.stringify(metadata)], { type: "application/json" }));
   form.append("file", file);
@@ -205,15 +307,18 @@ async function uploadFile(file) {
 
 /* ====== Render ====== */
 function categoryOf(mimeType) {
+  if (mimeType === FOLDER_MIME) return "folder";
   if (mimeType.startsWith("image/")) return "foto";
   if (mimeType === "application/pdf" || mimeType.includes("document") || mimeType.includes("text")) return "dokumen";
   return "lainnya";
 }
 
-function renderFiles() {
+function renderItems() {
   const query = els.searchInput.value.trim().toLowerCase();
 
-  const filtered = allFiles.filter((f) => {
+  const folders = allItems.filter((f) => f.mimeType === FOLDER_MIME && (!query || f.name.toLowerCase().includes(query)));
+  const files = allItems.filter((f) => {
+    if (f.mimeType === FOLDER_MIME) return false;
     const matchesCategory = activeCategory === "semua" || categoryOf(f.mimeType) === activeCategory;
     const matchesQuery = !query || f.name.toLowerCase().includes(query);
     return matchesCategory && matchesQuery;
@@ -221,18 +326,38 @@ function renderFiles() {
 
   els.fileList.innerHTML = "";
 
-  if (filtered.length === 0) {
+  if (folders.length === 0 && files.length === 0) {
     els.emptyState.classList.remove("hidden");
-    els.emptyState.textContent = allFiles.length === 0
-      ? "Belum ada berkas. Ketuk tombol unggah di bawah untuk mulai menyimpan."
-      : "Tidak ada berkas yang cocok.";
+    els.emptyState.textContent = allItems.length === 0
+      ? "Folder ini masih kosong. Ketuk tombol + di bawah untuk unggah berkas atau buat folder baru."
+      : "Tidak ada yang cocok.";
     return;
   }
   els.emptyState.classList.add("hidden");
 
-  for (const file of filtered) {
+  for (const folder of folders) {
+    els.fileList.appendChild(renderFolderRow(folder));
+  }
+  for (const file of files) {
     els.fileList.appendChild(renderFileRow(file));
   }
+}
+
+function renderFolderRow(folder) {
+  const row = document.createElement("div");
+  row.className = "file-row";
+  row.addEventListener("click", () => enterFolder(folder));
+  row.innerHTML = `
+    <div class="file-icon folder">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg>
+    </div>
+    <div class="file-meta">
+      <div class="file-name">${escapeHtml(folder.name)}</div>
+      <div class="file-sub">Folder</div>
+    </div>
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--ink-faint); flex-shrink:0;"><path d="M9 6l6 6-6 6"/></svg>
+  `;
+  return row;
 }
 
 function renderFileRow(file) {
@@ -256,9 +381,6 @@ function renderFileRow(file) {
 function fileIconSvg(cat) {
   if (cat === "foto") {
     return `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10.5" r="1.5"/><path d="M21 15l-5-5L5 19"/></svg>`;
-  }
-  if (cat === "dokumen") {
-    return `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/></svg>`;
   }
   return `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/></svg>`;
 }
